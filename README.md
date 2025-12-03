@@ -116,7 +116,7 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      transition: transform 0.05s ease, box-shadow 0.1s.ease, background 0.2s ease;
+      transition: transform 0.05s ease, box-shadow 0.1s ease, background 0.2s ease;
       white-space: nowrap;
     }
 
@@ -518,7 +518,7 @@
       </div>
     </div>
 
-    <!-- 4. ปุ่มประมวลผล -->
+    <!-- 4. ปุ่มประมวลผล + ดาวน์โหลด DOC -->
     <div class="card">
       <div class="flex" style="align-items: center; justify-content: space-between; gap: 10px;">
         <div>
@@ -530,6 +530,9 @@
         <div class="flex" style="justify-content: flex-end;">
           <button id="btnCalculate" class="primary">
             ⚙️ ประมวลผลอัตโนมัติ
+          </button>
+          <button id="btnDownloadDoc" class="secondary">
+            ⬇️ ดาวน์โหลด .DOC
           </button>
         </div>
       </div>
@@ -688,6 +691,45 @@
       if (mean >= 2.51) return "ปานกลาง";
       if (mean >= 1.51) return "น้อย";
       return "น้อยที่สุด";
+    }
+
+    // ใช้คำนวณสถิติรายด้านสำหรับ export .doc ด้วย
+    function computeDimensionStats() {
+      const itemInputs = document.querySelectorAll("input[data-role='itemText']");
+      const dimInputs = document.querySelectorAll("input[data-role='itemDim']");
+      const meanInputs = document.querySelectorAll("input[data-role='itemMean']");
+
+      const dimMap = {};
+      let sumAllMeans = 0;
+      let countMeans = 0;
+
+      for (let i = 0; i < itemInputs.length; i++) {
+        const dim = (dimInputs[i].value.trim() || "ไม่ระบุด้าน");
+        const meanVal = parseFloat(meanInputs[i].value);
+        if (!isNaN(meanVal)) {
+          if (!dimMap[dim]) dimMap[dim] = { sum: 0, count: 0 };
+          dimMap[dim].sum += meanVal;
+          dimMap[dim].count += 1;
+
+          sumAllMeans += meanVal;
+          countMeans++;
+        }
+      }
+
+      const dims = Object.keys(dimMap).map(dim => {
+        const mean = dimMap[dim].sum / dimMap[dim].count;
+        return {
+          name: dim,
+          mean,
+          level: interpretLikert(mean)
+        };
+      });
+
+      return {
+        dims,
+        overallMean: countMeans ? sumAllMeans / countMeans : null,
+        countMeans
+      };
     }
 
     // ---------- คำนวณและแปลผล ----------
@@ -960,6 +1002,36 @@
       hasResult = true;
     }
 
+    // ---------- ลายเซ็นสำหรับ .doc ----------
+    function buildSignatureBlockForDoc() {
+      const user = getCurrentUser() || {};
+      const reporterName = `${user.firstName || ""} ${user.lastName || ""}`.trim();
+      const deputyName = (document.getElementById("deputyName").value || "").trim();
+      const directorName = (document.getElementById("directorName").value || "").trim();
+
+      const reporterLine = reporterName || "........................................................";
+      const deputyLine   = deputyName   || "........................................................";
+      const directorLine = directorName || "........................................................";
+
+      const sigHtml = `
+        <h2>ลายเซ็นผู้เกี่ยวข้อง</h2>
+        <p style="margin-top:18pt;">
+          ลงชื่อ........................................................ ผู้รายงาน<br>
+          (${reporterLine})<br>
+          ตำแหน่ง: ${roleLabel(user.role || "teacher")}
+        </p>
+        <p style="margin-top:18pt;">
+          ลงชื่อ........................................................ รองผู้อำนวยการ<br>
+          (${deputyLine})
+        </p>
+        <p style="margin-top:18pt;">
+          ลงชื่อ........................................................ ผู้อำนวยการ<br>
+          (${directorLine})
+        </p>
+      `;
+      return sigHtml;
+    }
+
     // ---------- สถานะ + localStorage ----------
     function getStatusObj() {
       const raw = localStorage.getItem(STATUS_KEY);
@@ -1220,6 +1292,167 @@
       alert("บันทึกสถานะแล้ว: ผู้อำนวยการรับทราบรายงาน");
     }
 
+    // ---------- สร้าง .DOC ----------
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function createDocContent() {
+      const schoolName = document.getElementById("schoolName").value.trim();
+      const affiliation = document.getElementById("affiliation").value.trim();
+
+      const activityName = document.getElementById("activityName").value.trim() || "กิจกรรมครั้งนี้";
+      const academicYear = document.getElementById("academicYear").value.trim();
+      const semester = document.getElementById("semester").value.trim();
+      const managementGroup = document.getElementById("managementGroup").value.trim();
+      const responsiblePerson = document.getElementById("responsiblePerson").value.trim();
+      const numAttendees = document.getElementById("numAttendees").value.trim();
+      const numParticipants = document.getElementById("numParticipants").value.trim();
+      const budgetValue = document.getElementById("budget").value.trim();
+
+      const summaryText = document.getElementById("summaryText").innerText.trim();
+      const policyText = document.getElementById("policyText").innerText.trim();
+      const now = new Date().toLocaleString("th-TH");
+      const user = getCurrentUser() || {};
+
+      const dimStats = computeDimensionStats();
+      const dims = dimStats.dims || [];
+
+      let headerHtml = "";
+      if (schoolName) headerHtml += `<p><b>สถานศึกษา:</b> ${escapeHtml(schoolName)}</p>`;
+      if (affiliation) headerHtml += `<p><b>สังกัด:</b> ${escapeHtml(affiliation)}</p>`;
+      headerHtml += `<p><b>ชื่อกิจกรรม:</b> ${escapeHtml(activityName)}</p>`;
+
+      if (semester || academicYear) {
+        headerHtml += `<p><b>ภาคเรียน/ปีการศึกษา:</b> ${escapeHtml((semester || "") + (academicYear ? " ปีการศึกษา " + academicYear : ""))}</p>`;
+      }
+      if (managementGroup) {
+        headerHtml += `<p><b>กลุ่มบริหาร:</b> ${escapeHtml(managementGroup)}</p>`;
+      }
+      if (responsiblePerson) {
+        headerHtml += `<p><b>ผู้รับผิดชอบกิจกรรม:</b> ${escapeHtml(responsiblePerson)}</p>`;
+      }
+      if (numAttendees) {
+        headerHtml += `<p><b>จำนวนผู้เข้าร่วมกิจกรรม:</b> ${escapeHtml(numAttendees)} คน</p>`;
+      }
+      if (numParticipants) {
+        headerHtml += `<p><b>จำนวนผู้ตอบแบบประเมิน:</b> ${escapeHtml(numParticipants)} คน</p>`;
+      }
+      if (budgetValue) {
+        headerHtml += `<p><b>งบประมาณ:</b> ${escapeHtml(budgetValue)} บาท</p>`;
+      }
+
+      let userLine = "";
+      if (user.firstName || user.lastName) {
+        userLine = `จัดทำโดย: ${user.firstName || ""} ${user.lastName || ""} (${roleLabel(user.role || "teacher")})`;
+        headerHtml += `<p>${escapeHtml(userLine)}</p>`;
+      }
+
+      headerHtml += `<p>จัดทำเมื่อ: ${escapeHtml(now)}</p>`;
+
+      // ตารางสรุปค่าเฉลี่ยตามด้าน
+      let dimTableHtml = "";
+      if (dims.length > 0) {
+        dimTableHtml += `
+          <h2>สรุปค่าเฉลี่ยตามด้าน (Dimension)</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>ด้าน</th>
+                <th>ค่าเฉลี่ย</th>
+                <th>ระดับ</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+        dims.forEach(d => {
+          dimTableHtml += `
+            <tr>
+              <td>${escapeHtml(d.name)}</td>
+              <td>${d.mean.toFixed(2)}</td>
+              <td>${escapeHtml(d.level)}</td>
+            </tr>
+          `;
+        });
+        dimTableHtml += `
+            </tbody>
+          </table>
+        `;
+      }
+
+      const safeSummary = escapeHtml(summaryText).replace(/\n/g, "<br>");
+      const safePolicy  = escapeHtml(policyText).replace(/\n/g, "<br>");
+
+      const docHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>รายงานการประเมินกิจกรรม</title>
+  <style>
+    body {
+      font-family: 'TH SarabunPSK', 'TH Sarabun New', 'Tahoma', sans-serif;
+      font-size: 16pt;
+      line-height: 1.3;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 0;
+    }
+    h2 {
+      margin-top: 18pt;
+      margin-bottom: 6pt;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6pt;
+    }
+    th, td {
+      border: 1px solid #000;
+      padding: 4pt;
+      text-align: center;
+    }
+    p {
+      margin: 4pt 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>รายงานการประเมินผลการดำเนินกิจกรรม</h1>
+  ${headerHtml}
+  ${dimTableHtml}
+  <h2>สรุปผลภาพรวมของกิจกรรม</h2>
+  <p>${safeSummary}</p>
+  <h2>ข้อเสนอแนะเชิงนโยบาย/การบริหารจัดการต่อไป</h2>
+  <p>${safePolicy}</p>
+  ${buildSignatureBlockForDoc()}
+</body>
+</html>`;
+
+      return docHtml;
+    }
+
+    function downloadDoc() {
+      if (!hasResult) {
+        alert("กรุณากด \"ประมวลผลอัตโนมัติ\" ก่อน แล้วจึงดาวน์โหลดไฟล์ .DOC");
+        return;
+      }
+      const html = createDocContent();
+      const blob = new Blob([html], { type: "application/msword" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "activity-eval-report.doc";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
     // ---------- INIT & LOGIN ----------
     document.addEventListener("DOMContentLoaded", () => {
       renderItemsTable();
@@ -1288,6 +1521,8 @@
 
       // ปุ่มหลักในหน้า Main
       document.getElementById("btnCalculate").addEventListener("click", calculateAndRender);
+      document.getElementById("btnDownloadDoc").addEventListener("click", downloadDoc);
+
       document.getElementById("btnSaveDraft").addEventListener("click", saveDraft);
       document.getElementById("btnSubmitReport").addEventListener("click", submitReport);
       document.getElementById("btnEditUnlock").addEventListener("click", editUnlock);

@@ -148,6 +148,13 @@
       box-shadow: none;
     }
 
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -273,6 +280,39 @@
       color: #c53030;
       margin-top: 6px;
       min-height: 18px;
+    }
+
+    /* สีสถานะ */
+    .status-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .status-none {
+      background: #edf2f7;
+      color: #4a5568;
+    }
+    .status-draft {
+      background: #fffaf0;
+      color: #b7791f;
+    }
+    .status-submitted {
+      background: #ebf8ff;
+      color: #2b6cb0;
+    }
+    .status-editing {
+      background: #f7fafc;
+      color: #4a5568;
+    }
+    .status-ack-deputy {
+      background: #c6f6d5;
+      color: #22543d;
+    }
+    .status-ack-director {
+      background: #9ae6b4;
+      color: #22543d;
     }
 
     @media (max-width: 768px) {
@@ -521,6 +561,9 @@
           ยังไม่เคยบันทึกข้อมูลหรือส่งรายงาน
         </div>
       </div>
+      <p class="small mt-1">
+        * เงื่อนไข: ผู้อำนวยการจะกดปุ่มรับทราบได้ก็ต่อเมื่อ “รองผู้อำนวยการ” รับทราบแล้ว
+      </p>
     </div>
 
     <!-- 6. ผลลัพธ์เชิงสถิติ -->
@@ -948,6 +991,17 @@
       }
     }
 
+    function statusClass(code) {
+      switch (code) {
+        case "draft": return "status-draft";
+        case "submitted": return "status-submitted";
+        case "editing": return "status-editing";
+        case "ack_deputy": return "status-ack-deputy";
+        case "ack_director": return "status-ack-director";
+        default: return "status-none";
+      }
+    }
+
     function renderStatus() {
       const statusArea = document.getElementById("statusText");
       const statusObj = getStatusObj();
@@ -957,12 +1011,12 @@
         return;
       }
 
-      let text = `สถานะปัจจุบัน: ${statusLabel(statusObj.current)}\n\nไทม์ไลน์การดำเนินการ:\n`;
+      let html = `สถานะปัจจุบัน: <span class="status-pill ${statusClass(statusObj.current)}">${statusLabel(statusObj.current)}</span><br><br>ไทม์ไลน์การดำเนินการ:<br>`;
       statusObj.history.forEach((h) => {
-        text += `• [${h.time}] ${statusLabel(h.status)}${h.note ? " – " + h.note : ""}\n`;
+        html += `• [${h.time}] <span class="status-pill ${statusClass(h.status)}">${statusLabel(h.status)}</span>${h.note ? " – " + h.note : ""}<br>`;
       });
 
-      statusArea.textContent = text;
+      statusArea.innerHTML = html;
     }
 
     function setFormDisabled(disabled) {
@@ -983,11 +1037,14 @@
       const btnAcknowledgeDeputy = document.getElementById("btnAcknowledgeDeputy");
       const btnAcknowledgeDirector = document.getElementById("btnAcknowledgeDirector");
 
-      // ควบคุมการแก้ไขฟอร์ม
+      // ฟอร์ม: ครูแก้ได้, ผู้บริหารอ่านอย่างเดียว
       const shouldLockInputs = st.isLocked || role !== "teacher";
       setFormDisabled(shouldLockInputs);
 
-      // ซ่อน/แสดงปุ่มตามบทบาท
+      // ค่า default
+      btnAcknowledgeDeputy.disabled = false;
+      btnAcknowledgeDirector.disabled = false;
+
       if (role === "teacher") {
         btnSaveDraft.style.display = "inline-flex";
         btnSubmitReport.style.display = "inline-flex";
@@ -1006,6 +1063,15 @@
         btnEditUnlock.style.display = "none";
         btnAcknowledgeDeputy.style.display = "none";
         btnAcknowledgeDirector.style.display = "inline-flex";
+
+        // เงื่อนไข: ผอ. กดได้เมื่อสถานะปัจจุบันคือ ack_deputy หรือเคย ack_director แล้ว
+        if (st.current !== "ack_deputy" && st.current !== "ack_director") {
+          btnAcknowledgeDirector.disabled = true;
+          btnAcknowledgeDirector.title = "รองผู้อำนวยการต้องกดรับทราบก่อน";
+        } else {
+          btnAcknowledgeDirector.disabled = false;
+          btnAcknowledgeDirector.title = "";
+        }
       }
     }
 
@@ -1140,11 +1206,32 @@
     }
 
     function acknowledgeDirector() {
+      const st = getStatusObj();
+      if (st.current !== "ack_deputy" && st.current !== "ack_director") {
+        alert("รองผู้อำนวยการต้องกดรับทราบรายงานก่อน ผู้อำนวยการจึงจะรับทราบได้");
+        return;
+      }
       updateStatus("ack_director", "ผู้อำนวยการกดรับทราบรายงาน", true);
       alert("บันทึกสถานะแล้ว: ผู้อำนวยการรับทราบรายงาน");
     }
 
     // ---------- DOC / PDF ----------
+    function buildSignatureBlock() {
+      const user = getCurrentUser() || {};
+      const reporterName = `${user.firstName || ""} ${user.lastName || ""}`.trim();
+
+      let sig = `\n\n=== ลายเซ็นผู้เกี่ยวข้อง ===\n`;
+      sig += `ลงชื่อ........................................................ ผู้รายงาน\n`;
+      sig += reporterName ? `(${reporterName})\n` : `(........................................................)\n`;
+      sig += `ตำแหน่ง: ${roleLabel(user.role || "teacher")}\n\n`;
+      sig += `ลงชื่อ........................................................ รองผู้อำนวยการ\n`;
+      sig += `(........................................................)\n\n`;
+      sig += `ลงชื่อ........................................................ ผู้อำนวยการ\n`;
+      sig += `(........................................................)\n`;
+
+      return sig;
+    }
+
     function createDocContent() {
       const schoolName = document.getElementById("schoolName").value.trim();
       const affiliation = document.getElementById("affiliation").value.trim();
@@ -1204,7 +1291,8 @@
         `=== ข้อเสนอแนะเชิงนโยบาย/การบริหาร ===\n` +
         policyText + `\n\n` +
         `=== สถิติโดยสรุป ===\n` +
-        statsText;
+        statsText +
+        buildSignatureBlock();
 
       const safeText = fullText
         .replace(/&/g, "&amp;")
@@ -1316,7 +1404,8 @@ h1 { text-align: center; }
         `=== ข้อเสนอแนะเชิงนโยบาย/การบริหาร ===\n` +
         policyText + `\n\n` +
         `=== สถิติโดยสรุป ===\n` +
-        statsText;
+        statsText +
+        buildSignatureBlock();
 
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });

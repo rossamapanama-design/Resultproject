@@ -116,7 +116,7 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      transition: transform 0.05s ease, box-shadow 0.1s ease, background 0.2s ease;
+      transition: transform 0.05s ease, box-shadow 0.1s.ease, background 0.2s ease;
       white-space: nowrap;
     }
 
@@ -392,6 +392,16 @@
           <input id="affiliation" type="text" placeholder="เช่น สำนักงานเขตพื้นที่การศึกษามัธยมศึกษากรุงเทพมหานคร เขต 2" />
         </div>
       </div>
+      <div class="flex mt-2">
+        <div style="flex: 1 1 260px;">
+          <label>ชื่อรองผู้อำนวยการ</label>
+          <input id="deputyName" type="text" placeholder="เช่น นาย.... รองผู้อำนวยการโรงเรียน" />
+        </div>
+        <div style="flex: 1 1 260px;">
+          <label>ชื่อผู้อำนวยการ</label>
+          <input id="directorName" type="text" placeholder="เช่น นาย.... ผู้อำนวยการโรงเรียน" />
+        </div>
+      </div>
     </div>
 
     <!-- ส่วนหัว + ผู้ใช้ปัจจุบัน -->
@@ -508,7 +518,7 @@
       </div>
     </div>
 
-    <!-- 4. ปุ่มประมวลผล + ดาวน์โหลด -->
+    <!-- 4. ปุ่มประมวลผล -->
     <div class="card">
       <div class="flex" style="align-items: center; justify-content: space-between; gap: 10px;">
         <div>
@@ -520,12 +530,6 @@
         <div class="flex" style="justify-content: flex-end;">
           <button id="btnCalculate" class="primary">
             ⚙️ ประมวลผลอัตโนมัติ
-          </button>
-          <button id="btnDownloadDoc" class="secondary">
-            ⬇️ .DOC
-          </button>
-          <button id="btnDownloadPdf" class="secondary">
-            ⬇️ PDF
           </button>
         </div>
       </div>
@@ -592,9 +596,6 @@
       </div>
     </div>
   </div>
-
-  <!-- jsPDF CDN สำหรับสร้างไฟล์ PDF -->
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
   <script>
     // ---------- CONFIG ----------
@@ -1106,6 +1107,8 @@
       const data = {
         schoolName: document.getElementById("schoolName").value,
         affiliation: document.getElementById("affiliation").value,
+        deputyName: document.getElementById("deputyName").value,
+        directorName: document.getElementById("directorName").value,
         activityName: document.getElementById("activityName").value,
         academicYear: document.getElementById("academicYear").value,
         semester: document.getElementById("semester").value,
@@ -1141,6 +1144,8 @@
         const data = JSON.parse(raw);
         document.getElementById("schoolName").value = data.schoolName || "";
         document.getElementById("affiliation").value = data.affiliation || "";
+        document.getElementById("deputyName").value = data.deputyName || "";
+        document.getElementById("directorName").value = data.directorName || "";
         document.getElementById("activityName").value = data.activityName || "";
         document.getElementById("academicYear").value = data.academicYear || "";
         document.getElementById("semester").value = data.semester || "";
@@ -1215,208 +1220,6 @@
       alert("บันทึกสถานะแล้ว: ผู้อำนวยการรับทราบรายงาน");
     }
 
-    // ---------- DOC / PDF ----------
-    function buildSignatureBlock() {
-      const user = getCurrentUser() || {};
-      const reporterName = `${user.firstName || ""} ${user.lastName || ""}`.trim();
-
-      let sig = `\n\n=== ลายเซ็นผู้เกี่ยวข้อง ===\n`;
-      sig += `ลงชื่อ........................................................ ผู้รายงาน\n`;
-      sig += reporterName ? `(${reporterName})\n` : `(........................................................)\n`;
-      sig += `ตำแหน่ง: ${roleLabel(user.role || "teacher")}\n\n`;
-      sig += `ลงชื่อ........................................................ รองผู้อำนวยการ\n`;
-      sig += `(........................................................)\n\n`;
-      sig += `ลงชื่อ........................................................ ผู้อำนวยการ\n`;
-      sig += `(........................................................)\n`;
-
-      return sig;
-    }
-
-    function createDocContent() {
-      const schoolName = document.getElementById("schoolName").value.trim();
-      const affiliation = document.getElementById("affiliation").value.trim();
-
-      const activityName = document.getElementById("activityName").value.trim() || "กิจกรรมครั้งนี้";
-      const academicYear = document.getElementById("academicYear").value.trim();
-      const semester = document.getElementById("semester").value.trim();
-      const managementGroup = document.getElementById("managementGroup").value.trim();
-      const responsiblePerson = document.getElementById("responsiblePerson").value.trim();
-      const numAttendees = document.getElementById("numAttendees").value.trim();
-      const numParticipants = document.getElementById("numParticipants").value.trim();
-      const budgetValue = document.getElementById("budget").value.trim();
-
-      const summaryText = document.getElementById("summaryText").innerText.trim();
-      const policyText = document.getElementById("policyText").innerText.trim();
-      const statsText = document.getElementById("statsContainer").innerText.trim();
-      const now = new Date().toLocaleString("th-TH");
-
-      const user = getCurrentUser() || {};
-      let userLine = "";
-      if (user.firstName || user.lastName) {
-        userLine = `จัดทำโดย: ${user.firstName || ""} ${user.lastName || ""} (${roleLabel(user.role || "teacher")})\n`;
-      }
-
-      let header = `รายงานการประเมินผลการดำเนินกิจกรรมออนไลน์\n`;
-      if (schoolName) header += `สถานศึกษา: ${schoolName}\n`;
-      if (affiliation) header += `สังกัด: ${affiliation}\n`;
-      header += `ชื่อกิจกรรม: ${activityName}\n`;
-      if (semester || academicYear) {
-        header += `ภาคเรียน/ปีการศึกษา: `;
-        if (semester) header += `${semester} `;
-        if (academicYear) header += `ปีการศึกษา ${academicYear} `;
-        header += `\n`;
-      }
-      if (managementGroup) {
-        header += `กลุ่มบริหาร: ${managementGroup}\n`;
-      }
-      if (responsiblePerson) {
-        header += `ผู้รับผิดชอบกิจกรรม: ${responsiblePerson}\n`;
-      }
-      if (numAttendees) {
-        header += `จำนวนผู้เข้าร่วมกิจกรรม: ${numAttendees} คน\n`;
-      }
-      if (numParticipants) {
-        header += `จำนวนผู้ตอบแบบประเมิน: ${numParticipants} คน\n`;
-      }
-      if (budgetValue) {
-        header += `งบประมาณ: ${budgetValue} บาท\n`;
-      }
-      header += userLine;
-      header += `จัดทำเมื่อ: ${now}\n\n`;
-
-      const fullText =
-        header +
-        `=== สรุปผลภาพรวม ===\n` +
-        summaryText + `\n\n` +
-        `=== ข้อเสนอแนะเชิงนโยบาย/การบริหาร ===\n` +
-        policyText + `\n\n` +
-        `=== สถิติโดยสรุป ===\n` +
-        statsText +
-        buildSignatureBlock();
-
-      const safeText = fullText
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-
-      const docHtml =
-        `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>รายงานการประเมินกิจกรรม</title>
-<style>
-body { font-family: "Sarabun", "Tahoma", sans-serif; white-space: pre-wrap; }
-h1 { text-align: center; }
-</style>
-</head>
-<body>
-<h1>รายงานการประเมินกิจกรรม</h1>
-<pre>${safeText}</pre>
-</body>
-</html>`;
-
-      return docHtml;
-    }
-
-    function downloadDoc() {
-      if (!hasResult) {
-        alert("กรุณากด \"ประมวลผลอัตโนมัติ\" ก่อนดาวน์โหลดไฟล์ .DOC");
-        return;
-      }
-      const content = createDocContent();
-      const blob = new Blob([content], { type: "application/msword" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "activity-eval-report.doc";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-
-    function downloadPdf() {
-      if (!hasResult) {
-        alert("กรุณากด \"ประมวลผลอัตโนมัติ\" ก่อนดาวน์โหลดไฟล์ PDF");
-        return;
-      }
-      if (!window.jspdf || !window.jspdf.jsPDF) {
-        alert("ไม่สามารถโหลดไลบรารี PDF ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตหรือลองใหม่อีกครั้ง");
-        return;
-      }
-
-      const schoolName = document.getElementById("schoolName").value.trim();
-      const affiliation = document.getElementById("affiliation").value.trim();
-
-      const activityName = document.getElementById("activityName").value.trim() || "กิจกรรมครั้งนี้";
-      const academicYear = document.getElementById("academicYear").value.trim();
-      const semester = document.getElementById("semester").value.trim();
-      const managementGroup = document.getElementById("managementGroup").value.trim();
-      const responsiblePerson = document.getElementById("responsiblePerson").value.trim();
-      const numAttendees = document.getElementById("numAttendees").value.trim();
-      const numParticipants = document.getElementById("numParticipants").value.trim();
-      const budgetValue = document.getElementById("budget").value.trim();
-
-      const summaryText = document.getElementById("summaryText").innerText.trim();
-      const policyText = document.getElementById("policyText").innerText.trim();
-      const statsText = document.getElementById("statsContainer").innerText.trim();
-      const now = new Date().toLocaleString("th-TH");
-
-      const user = getCurrentUser() || {};
-      let userLine = "";
-      if (user.firstName || user.lastName) {
-        userLine = `จัดทำโดย: ${user.firstName || ""} ${user.lastName || ""} (${roleLabel(user.role || "teacher")})\n`;
-      }
-
-      let header = `รายงานการประเมินผลการดำเนินกิจกรรมออนไลน์\n`;
-      if (schoolName) header += `สถานศึกษา: ${schoolName}\n`;
-      if (affiliation) header += `สังกัด: ${affiliation}\n`;
-      header += `ชื่อกิจกรรม: ${activityName}\n`;
-      if (semester || academicYear) {
-        header += `ภาคเรียน/ปีการศึกษา: `;
-        if (semester) header += `${semester} `;
-        if (academicYear) header += `ปีการศึกษา ${academicYear} `;
-        header += `\n`;
-      }
-      if (managementGroup) {
-        header += `กลุ่มบริหาร: ${managementGroup}\n`;
-      }
-      if (responsiblePerson) {
-        header += `ผู้รับผิดชอบกิจกรรม: ${responsiblePerson}\n`;
-      }
-      if (numAttendees) {
-        header += `จำนวนผู้เข้าร่วมกิจกรรม: ${numAttendees} คน\n`;
-      }
-      if (numParticipants) {
-        header += `จำนวนผู้ตอบแบบประเมิน: ${numParticipants} คน\n`;
-      }
-      if (budgetValue) {
-        header += `งบประมาณ: ${budgetValue} บาท\n`;
-      }
-      header += userLine;
-      header += `จัดทำเมื่อ: ${now}\n\n`;
-
-      const fullText =
-        header +
-        `=== สรุปผลภาพรวม ===\n` +
-        summaryText + `\n\n` +
-        `=== ข้อเสนอแนะเชิงนโยบาย/การบริหาร ===\n` +
-        policyText + `\n\n` +
-        `=== สถิติโดยสรุป ===\n` +
-        statsText +
-        buildSignatureBlock();
-
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
-      const margin = 40;
-      const maxWidth = 515;
-      doc.setFontSize(12);
-      const lines = doc.splitTextToSize(fullText, maxWidth);
-      doc.text(lines, margin, margin);
-      doc.save("activity-eval-report.pdf");
-    }
-
     // ---------- INIT & LOGIN ----------
     document.addEventListener("DOMContentLoaded", () => {
       renderItemsTable();
@@ -1485,9 +1288,6 @@ h1 { text-align: center; }
 
       // ปุ่มหลักในหน้า Main
       document.getElementById("btnCalculate").addEventListener("click", calculateAndRender);
-      document.getElementById("btnDownloadDoc").addEventListener("click", downloadDoc);
-      document.getElementById("btnDownloadPdf").addEventListener("click", downloadPdf);
-
       document.getElementById("btnSaveDraft").addEventListener("click", saveDraft);
       document.getElementById("btnSubmitReport").addEventListener("click", submitReport);
       document.getElementById("btnEditUnlock").addEventListener("click", editUnlock);
